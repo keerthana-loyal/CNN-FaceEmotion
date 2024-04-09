@@ -1,74 +1,47 @@
 import streamlit as st
-import tensorflow as tf
-from tensorflow import keras
-#import cv2
-from tempfile import NamedTemporaryFile
-from PIL import Image, ImageOps
+import torch
+from torchvision.utils import make_grid
 import numpy as np
+from PIL import Image
 
-categories = {0:'Angry',1:'Happy',2:'Neutral',3:'Sad',4:'Surprise'}
+# Function to generate images using the specified model
+def generate_images(generator, num_images, latent_size):
+    # Generate latent vectors
+    latent_vectors = torch.randn(num_images, latent_size, 1, 1)
+    # Generate images
+    with torch.no_grad():
+        generated_images = generator(latent_vectors)
+    return generated_images
 
-emojis = {0:':angry:',1:':smile:',2:':neutral_face:',3:':cry:',4:':frowning:'}
+# Dictionary to map expressions to corresponding model paths
+expression_to_model = {
+    'model': './models/angry_generator_model.pth'
+}
 
-# Prediction function which take image as input and return string
+# Streamlit app
+st.title("Image Generation")
 
-def predict_image(filename):
-    # Path of the model where model is stored
-    path_to_model = r'model.hdf5'
+# Dropdown to select expression
+expression = st.selectbox("Select Expression", options=['Angry', 'Happy', 'Neutral', 'Sad', 'Surprise'])
 
-    with st.spinner('Model is being loaded..'):
-        # Load model using load_model function of Keras
-        model = keras.models.load_model(path_to_model, compile=False)
-        model.compile()
-        print("Done!")
+# Load the selected model
+@st.cache_resource
+def load_model(expression):
+    model_path = expression_to_model[expression]
+    return torch.load(model_path, map_location=torch.device('cpu'))  # Load the model
 
+# Load model
+model = load_model(expression)
 
-    #Image loading
-    img_ = tf.keras.utils.load_img(filename, target_size=(224, 224))
+# Specify number of images to generate
+num_images = st.number_input("Number of Images to Generate", value=1)
 
-    #converting image to array
-    img_array = tf.keras.utils.img_to_array(img_)
-
-    # blur = cv2.GaussianBlur(img_array, (5, 5), 0)
-
-    # img = cv2.cvtColor(blur, cv2.COLOR_BGR2RGB)
-
-    x = np.asarray(img_array) / 255.0
-    img_processed = np.expand_dims(x, axis=0)
-    img_processed /= 255.
-
-    # prediction using already loaded model
-    prediction = model.predict(img_processed)
-
-    #finding the maximum value which indicates the highest probablity of the detected object
-    index = np.argmax(prediction)
-
-    return index
-
-
-
-st.title("""
-         # Face Expressions Classification
-         """
-         )
-
-
-
-
-#option has been set for the file uploader
-st.set_option('deprecation.showfileUploaderEncoding', False)
-# Take file as input using file_uploader function of streamlit
-buffer = st.file_uploader("Upload a JPG File", type=['jpg'])
-temp_file = NamedTemporaryFile(delete=False)
-
-if buffer is None:
-    st.text("Please upload an image file")
-else:
-
-    image = Image.open(buffer)
-    temp_file.write(buffer.getvalue())
-    st.image(image, use_column_width=True)
-    predict = predict_image(temp_file.name)
-    face = categories[predict]
-    emo = emojis[predict]
-    st.write("This image most likely belongs to {} - {}".format(face,emo),font_size=30)
+# Generate and display images
+if st.button("Generate Images"):
+    latent_size = 128  # Assuming latent size is 100
+    generated_images = generate_images(model, num_images, latent_size)
+    # Create a grid of generated images
+    grid = make_grid(generated_images, nrow=4, normalize=True)
+    # Convert tensor to PIL Image
+    image = Image.fromarray(grid.mul(255).clamp(0, 255).byte().permute(1, 2, 0).cpu().numpy())
+    st.image(image, caption=f"Generated {num_images} images", use_column_width=True)
