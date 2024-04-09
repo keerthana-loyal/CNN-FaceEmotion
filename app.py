@@ -1,51 +1,45 @@
 import streamlit as st
-import torch
-from torchvision.utils import make_grid
 import numpy as np
+import tensorflow as tf
+import os
 from PIL import Image
 
-# Function to generate images using the specified model
-def generate_images(generator, num_images, latent_size):
-    # Generate latent vectors
-    latent_vectors = torch.randn(num_images, latent_size, 1, 1)
-    # Generate images
-    with torch.no_grad():
-        generated_images = generator(latent_vectors)
-    return generated_images
+# Function to load the trained saved model
+def load_model():
+    return tf.saved_model.load('saved_model')  # Load the SavedModel format
 
-# Dictionary to map expressions to corresponding model paths
-expression_to_model = {
-    'Angry': './models/angry_generator_model.pth',
-    'Happy': './models/Happy_generator_model.pth',
-    'Neutral': './models/Neutral_generator_model.pth',
-    'Sad': './models/Sad_generator_model.pth',
-    'Surprise': './models/Surprise_generator_model.pth'
-}
+vae_model = load_model()
 
-# Streamlit app
-st.title("Image Generation")
+def generate_output(input_image):
+    # Resize and normalize the input image
+    input_image = np.array(input_image.resize((128, 128))) / 255.0
+    input_image = np.expand_dims(input_image, axis=0)
+    
+    # Ensure the input is in the correct dtype, TensorFlow typically expects float32
+    input_tensor = tf.convert_to_tensor(input_image, dtype=tf.float32)
+    
+    # Create a dictionary for input as expected by the serving signature
+    # 'inputs' is the key that we found needs to be used from the error message and model signature inspection
+    input_dict = {'inputs': input_tensor}
 
-# Dropdown to select expression
-expression = st.selectbox("Select Expression", options=['Angry', 'Happy', 'Neutral', 'Sad', 'Surprise'])
+    # Use the serving signature with the correct input format
+    output = vae_model.signatures['serving_default'](**input_dict)
 
-# Load the selected model
-@st.cache_resource
-def load_model(expression):
-    model_path = expression_to_model[expression]
-    return torch.load(model_path, map_location=torch.device('cpu'))  # Load the model
+    # Extracting the output assuming 'output_0' is the key for the desired model output
+    output_image = output['output_0']
 
-# Load model
-model = load_model(expression)
+    return output_image[0].numpy()  # Convert to numpy array if needed
 
-# Specify number of images to generate
-num_images = st.number_input("Number of Images to Generate", value=1)
+# Streamlit UI
+st.title('VAE Model Deployment')
 
-# Generate and display images
-if st.button("Generate Images"):
-    latent_size = 128  # Assuming latent size is 100
-    generated_images = generate_images(model, num_images, latent_size)
-    # Create a grid of generated images
-    grid = make_grid(generated_images, nrow=4, normalize=True)
-    # Convert tensor to PIL Image
-    image = Image.fromarray(grid.mul(255).clamp(0, 255).byte().permute(1, 2, 0).cpu().numpy())
-    st.image(image, caption=f"Generated {num_images} images", use_column_width=True)
+uploaded_file = st.file_uploader("Upload an image", type=["jpg", "png"], accept_multiple_files=False)
+
+if uploaded_file is not None:
+    input_image = Image.open(uploaded_file)
+    st.image(input_image, caption='Uploaded Image', use_column_width=True)
+    if st.button('Generate Output'):
+        with st.spinner('Generating Output...'):
+            output_image = generate_output(input_image)
+            st.image(output_image, caption='Generated Output', use_column_width=True)
+            st.success('Output generated successfully!')
