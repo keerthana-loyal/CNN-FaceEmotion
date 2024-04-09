@@ -1,45 +1,48 @@
 import streamlit as st
-import numpy as np
-import tensorflow as tf
-import os
+from tensorflow.keras.models import load_model
 from PIL import Image
+import numpy as np
 
-# Function to load the trained saved model
-def load_model():
-    return tf.saved_model.load('CNNmodel')  # Load the SavedModel format
+# Define the path to the saved model
+MODEL_PATH = './CNN_Model.h5'
 
-vae_model = load_model()
+@st.cache(allow_output_mutation=True)
+def load_trained_model():
+    # Make sure to include any custom objects here if you had any in your model
+    my_model = load_model(MODEL_PATH)
+    return my_model
 
-def generate_output(input_image):
-    # Resize and normalize the input image
-    input_image = np.array(input_image.resize((128, 128))) / 255.0
-    input_image = np.expand_dims(input_image, axis=0)
-    
-    # Ensure the input is in the correct dtype, TensorFlow typically expects float32
-    input_tensor = tf.convert_to_tensor(input_image, dtype=tf.float32)
-    
-    # Create a dictionary for input as expected by the serving signature
-    # 'inputs' is the key that we found needs to be used from the error message and model signature inspection
-    input_dict = {'inputs': input_tensor}
+model = load_trained_model()
 
-    # Use the serving signature with the correct input format
-    output = vae_model.signatures['serving_default'](**input_dict)
+# Add a title and description
+st.title('Facial Expression Recognition App')
+st.write('This app uses a CNN to predict facial expressions.')
 
-    # Extracting the output assuming 'output_0' is the key for the desired model output
-    output_image = output['output_0']
+# Function to preprocess the image to fit the model's expected input format
+def preprocess_image(uploaded_image, target_size=(128, 128)):
+    image = Image.open(uploaded_image).convert('RGB')
+    image = image.resize(target_size)
+    image = np.array(image)
+    image = np.expand_dims(image, axis=0)
+    image = image / 255.0  # Normalize the image if the model expects pixel values in [0,1]
+    return image
 
-    return output_image[0].numpy()  # Convert to numpy array if needed
-
-# Streamlit UI
-st.title('VAE Model Deployment')
-
-uploaded_file = st.file_uploader("Upload an image", type=["jpg", "png"], accept_multiple_files=False)
-
+# Upload file interface
+uploaded_file = st.file_uploader("Upload an image with a face...", type=["jpg", "jpeg", "png"])
 if uploaded_file is not None:
-    input_image = Image.open(uploaded_file)
-    st.image(input_image, caption='Uploaded Image', use_column_width=True)
-    if st.button('Generate Output'):
-        with st.spinner('Generating Output...'):
-            output_image = generate_output(input_image)
-            st.image(output_image, caption='Generated Output', use_column_width=True)
-            st.success('Output generated successfully!')
+    # Display the uploaded image
+    st.image(uploaded_file, caption='Uploaded Image', use_column_width=True)
+    
+    # Preprocess the uploaded image
+    preprocessed_image = preprocess_image(uploaded_file)
+    
+    # Use the model to make a prediction
+    prediction = model.predict(preprocessed_image)
+    
+    # Assuming the model returns an array with the predicted probabilities for each class
+    # And you have a list of class names in the order that the model outputs
+    class_names = ['Happy', 'Sad', 'Angry', 'Surprise', 'Neutral']  # Update this list as necessary
+    predicted_class = class_names[np.argmax(prediction)]
+    
+    # Display the prediction
+    st.write(f'Predicted expression: {predicted_class}')
