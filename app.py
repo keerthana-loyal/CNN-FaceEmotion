@@ -6,7 +6,7 @@ from PIL import Image
 
 # Function to load the trained saved model
 def load_model():
-    return tf.saved_model.load('saved_model')  # Load the SavedModel format
+    return tf.saved_model.load('CNNmodel')  # Load the SavedModel format
 
 vae_model = load_model()
 
