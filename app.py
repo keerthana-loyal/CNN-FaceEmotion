@@ -15,7 +15,11 @@ def generate_images(generator, num_images, latent_size):
 
 # Dictionary to map expressions to corresponding model paths
 expression_to_model = {
-    'model': './models/angry_generator_model.pth'
+    'Angry': './models/angry_generator_model.pth',
+    'Happy': './models/Happy_generator_model.pth',
+    'Neutral': './models/Neutral_generator_model.pth',
+    'Sad': './models/Sad_generator_model.pth',
+    'Surprise': './models/Surprise_generator_model.pth'
 }
 
 # Streamlit app
